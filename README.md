@@ -2,11 +2,6 @@
 
 一个轻量级的 Spring Boot MVC 增强 Starter，提供统一响应封装、全局异常处理、增强参数校验、隐私字段脱敏等功能。
 
-[![Maven Central](https://img.shields.io/badge/maven--central-spring3-blue)](https://search.maven.org/artifact/io.github.mocanjie/mymvc-spring-boot-starter)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green)](http://www.apache.org/licenses/LICENSE-2.0.txt)
-[![Java](https://img.shields.io/badge/java-17+-orange)](https://www.oracle.com/java/technologies/javase/jdk17-archive-downloads.html)
-[![Spring Boot](https://img.shields.io/badge/spring--boot-3.2.0+-brightgreen)](https://spring.io/projects/spring-boot)
-
 ## 特性
 
 - 🚀 **统一响应封装** - 提供 `MyResponseResult<T>` 统一返回格式
@@ -25,7 +20,7 @@
 <dependency>
     <groupId>io.github.mocanjie</groupId>
     <artifactId>mymvc-spring-boot-starter</artifactId>
-    <version>spring3</version>
+    <version>[版本号]</version>
 </dependency>
 
 <!-- 2. 确保项目中有 spring-boot-starter-web -->
