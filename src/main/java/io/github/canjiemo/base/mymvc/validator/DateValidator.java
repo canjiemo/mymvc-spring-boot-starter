@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.apache.commons.lang3.StringUtils;
 
+import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
 
 public class DateValidator implements ConstraintValidator<Date, String> {
@@ -11,7 +12,6 @@ public class DateValidator implements ConstraintValidator<Date, String> {
 	private String message;
     private boolean required;
     private String format;
-    private final SimpleDateFormat sdf = new SimpleDateFormat();
 
 
 	@Override
@@ -36,16 +36,21 @@ public class DateValidator implements ConstraintValidator<Date, String> {
         }
 
         try{
-            sdf.applyPattern(format);
-            sdf.parse(requestVal);
-            return true;
-        }catch (Exception e){
-            if(!StringUtils.isBlank(message)){
-                context.disableDefaultConstraintViolation();
-                context.buildConstraintViolationWithTemplate(message).addConstraintViolation();
+            SimpleDateFormat dateFormat = new SimpleDateFormat(format);
+            dateFormat.setLenient(false);
+            ParsePosition parsePosition = new ParsePosition(0);
+            java.util.Date parsedDate = dateFormat.parse(requestVal, parsePosition);
+            if (parsedDate != null && parsePosition.getIndex() == requestVal.length()) {
+                return true;
             }
-            return false;
+        }catch (IllegalArgumentException ignored){
+            // Invalid date pattern configuration is treated as validation failure.
         }
-	}
 
+        if(!StringUtils.isBlank(message)){
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate(message).addConstraintViolation();
+        }
+        return false;
+	}
 }

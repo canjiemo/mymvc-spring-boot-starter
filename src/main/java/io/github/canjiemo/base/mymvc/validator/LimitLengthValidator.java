@@ -6,6 +6,7 @@ import org.apache.commons.lang3.StringUtils;
 
 public class LimitLengthValidator implements ConstraintValidator<LimitLength, String> {
 
+	private String message;
 	private boolean required;
 	private int chineseLength;
 	private long min;
@@ -13,6 +14,7 @@ public class LimitLengthValidator implements ConstraintValidator<LimitLength, St
 
 	@Override
 	public void initialize(LimitLength paramA) {
+		this.message = paramA.message();
 		this.required = paramA.required();
 		this.chineseLength = paramA.chineseLength();
 		this.min = paramA.min();
@@ -21,20 +23,18 @@ public class LimitLengthValidator implements ConstraintValidator<LimitLength, St
 
 	@Override
 	public boolean isValid(String text, ConstraintValidatorContext context) {
-		// 如果字段为空
 		if (StringUtils.isBlank(text)) {
-			return !required; // 如果必填则返回false，否则返回true
+			if (required) {
+				addConstraintViolation(context, resolveMessage("字段不能为空"));
+				return false;
+			}
+			return true;
 		}
 
-		// 计算字符串长度
 		long len = stringLength(text);
 
-		// 检查长度范围
 		if (len < min || len > max) {
-			// 自定义错误消息
-			context.disableDefaultConstraintViolation();
-			String message = String.format("字段长度必须在%d~%d之间", min, max);
-			context.buildConstraintViolationWithTemplate(message).addConstraintViolation();
+			addConstraintViolation(context, resolveMessage(String.format("字段长度必须在%d~%d之间", min, max)));
 			return false;
 		}
 
@@ -43,16 +43,25 @@ public class LimitLengthValidator implements ConstraintValidator<LimitLength, St
 	
 	private long stringLength(String value) {
 		long valueLength = 0;
-		String chinese = "[\u4e00-\u9fa5]";
-		for (int i = 0; i < value.length(); i++) {
-			String temp = value.substring(i, i + 1);
-			if (temp.matches(chinese)) {
+		for (int i = 0; i < value.length(); ) {
+			int codePoint = value.codePointAt(i);
+			if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN) {
 				valueLength += chineseLength;
 			} else {
 				valueLength += 1;
 			}
+			i += Character.charCount(codePoint);
 		}
 		return valueLength;
+	}
+
+	private String resolveMessage(String fallbackMessage) {
+		return StringUtils.isNotBlank(message) ? message : fallbackMessage;
+	}
+
+	private void addConstraintViolation(ConstraintValidatorContext context, String violationMessage) {
+		context.disableDefaultConstraintViolation();
+		context.buildConstraintViolationWithTemplate(violationMessage).addConstraintViolation();
 	}
 
 }

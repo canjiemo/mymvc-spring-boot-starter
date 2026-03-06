@@ -5,11 +5,11 @@
 ## 特性
 
 - 🚀 **统一响应封装** - 提供 `MyResponseResult<T>` 统一返回格式
-- 🛡️ **全局异常处理** - 继承 `MyBaseController` 自动处理常见异常
+- 🛡️ **全局异常处理** - 默认自动注册 `@RestControllerAdvice`，也兼容 `MyBaseController`
 - ✅ **增强参数校验** - 提供 5 种开箱即用的自定义校验器
 - 🔒 **隐私字段脱敏** - `@Privacy` 注解自动遮蔽响应 DTO 中的敏感字段，支持 Jackson / Fastjson / Fastjson2
 - 🎯 **零侵入集成** - 基于 Spring Boot 自动装配，引入即可使用
-- ⚡ **轻量灵活** - optional 依赖设计，容器中立，依赖注入优化
+- ⚡ **轻量灵活** - optional 依赖设计，容器中立，支持配置化覆盖默认行为
 
 ## 快速开始
 
@@ -28,9 +28,24 @@
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-web</artifactId>
 </dependency>
+
+<!-- 3. 如果需要 @Valid / @Validated 参数校验，补充以下依赖 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-aop</artifactId>
+</dependency>
 ```
 
-> **说明**：本 Starter 使用 `optional` 依赖，不会强制引入 Spring 相关依赖，避免版本冲突。请确保你的项目中已有 `spring-boot-starter-web` 依赖。
+> **说明**：
+> 1. 本 Starter 使用 `optional` 依赖，不会强制引入 Spring 相关依赖，避免版本冲突。
+> 2. `MyBaseController` 的异常输出约定是 HTTP 层固定返回 `200`，业务成功与失败通过响应体中的 `code` 表达。
+> 3. `@Valid` / `@Validated` 相关能力依赖 `spring-boot-starter-validation`；方法参数切面还需要 `spring-boot-starter-aop`。
+> 4. 全局异常处理默认自动启用；如果你只需要异常兜底，不必继承 `MyBaseController`。
 
 ### 基本使用
 
@@ -86,12 +101,14 @@ public class UserController extends MyBaseController {
 }
 ```
 
-#### 2. 自定义异常处理
+#### 2. 全局异常处理
 
-继承 `MyBaseController` 后自动处理常见异常，也可以抛出自定义业务异常：
+Starter 默认注册全局 `@RestControllerAdvice` 处理常见异常；如果你还想使用 `doJsonOut` / `doJsonMsg` 这类快捷方法，再继承 `MyBaseController`。
+
+业务代码里可以直接抛出自定义业务异常：
 
 ```java
-import io.github.mocanjie.base.mycommon.exception.BusinessException;
+import io.github.canjiemo.mycommon.exception.BusinessException;
 
 @Service
 public class UserService {
@@ -170,10 +187,12 @@ public class UserVO {
 | 框架 | 检测条件 | 说明 |
 |------|---------|------|
 | Jackson | classpath 含 `jackson-databind` | Spring Boot Web 默认集成，自动生效 |
-| Fastjson | classpath 含 `com.alibaba:fastjson` | 自动注册 `ValueFilter` |
-| Fastjson2 | classpath 含 `com.alibaba.fastjson2:fastjson2` | 自动注册 `ValueFilter` |
+| Fastjson | classpath 含 `com.alibaba:fastjson` | Starter 提供 `ValueFilter` Bean，需在应用侧注册到 Fastjson 配置 |
+| Fastjson2 | classpath 含 `com.alibaba.fastjson2:fastjson2` | Starter 提供 `ValueFilter` Bean，需在应用侧注册到 Fastjson2 配置 |
 
 三个框架可同时共存，各自处理自己的序列化路径。
+
+> **提示**：Jackson 下会自动拾取 `PrivacyJacksonModule`；Fastjson/Fastjson2 需要应用集成方将 `PrivacyFastjsonFilter` / `PrivacyFastjson2Filter` 挂到各自的 `HttpMessageConverter` 或序列化配置中。
 
 #### 4. 增强参数校验
 
@@ -215,14 +234,14 @@ public class UserController extends MyBaseController {
 
 ##### 4.2 方法参数校验
 
-使用 `@Validated` 注解在方法上启用参数级别的校验：
+使用 `@Validated` 注解在方法或类上启用参数级别的校验：
 
 ```java
 @RestController
+@Validated
 public class UserController extends MyBaseController {
 
     @GetMapping("/user/{id}")
-    @Validated // 启用方法参数校验
     public MyResponseResult getUser(
         @Number(min = 1, message = "用户ID必须大于0") @RequestParam String id
     ) {
@@ -244,7 +263,7 @@ private String idCard;
 ```
 
 **参数：**
-- `required`: 是否必填，默认 `false`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **校验规则：**
@@ -264,7 +283,7 @@ private String score;
 ```
 
 **参数：**
-- `required`: 是否必填，默认 `false`
+- `required`: 是否必填，默认 `true`
 - `min`: 最小值，默认 `Long.MIN_VALUE`
 - `max`: 最大值，默认 `Long.MAX_VALUE`
 - `integer`: 是否必须为整数，默认 `false`
@@ -296,8 +315,8 @@ private String boolValue;
 **参数：**
 - `value`: 允许的字符串值数组
 - `enumType`: 枚举类型配置（支持通过枚举字段值校验）
-- `ignoreCase`: 是否忽略大小写，默认 `false`
-- `required`: 是否必填，默认 `false`
+- `ignoreCase`: 是否忽略大小写，默认 `true`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **EnumType 参数：**
@@ -339,7 +358,7 @@ private String birthday;
 
 **参数：**
 - `format`: 日期格式（符合 `SimpleDateFormat` 规范）
-- `required`: 是否必填，默认 `false`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **常用格式：**
@@ -364,8 +383,8 @@ private String name;
 **参数：**
 - `min`: 最小长度，默认 `0`
 - `max`: 最大长度，默认 `Long.MAX_VALUE`
-- `chineseLength`: 一个中文字符计为几个长度，默认 `1`
-- `required`: 是否必填，默认 `false`
+- `chineseLength`: 一个中文字符计为几个长度，默认 `2`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **长度计算规则：**
@@ -389,7 +408,7 @@ private String name;
 
 ```java
 import io.github.canjiemo.base.mymvc.validator.MyValidatorUtils;
-import io.github.mocanjie.base.mycommon.exception.BusinessException;
+import io.github.canjiemo.mycommon.exception.BusinessException;
 
 public class UserService {
 
@@ -404,13 +423,15 @@ public class UserService {
 
 ## 全局异常处理
 
-继承 `MyBaseController` 后，以下异常会被自动处理：
+启用 Starter 后，以下异常会被自动处理。HTTP 层统一返回 `200`，错误类型体现在响应体的 `code` 字段中：
 
-| 异常类型 | HTTP状态码 | 说明 |
+| 异常类型 | 响应体 code | 说明 |
 |---------|-----------|------|
 | `BaseException` | 自定义 | 业务异常基类 |
 | `BusinessException` | 500 | 业务异常 |
 | `BindException` | 400 | 参数绑定异常（Bean Validation） |
+| `MethodArgumentNotValidException` | 400 | `@RequestBody` Bean Validation 异常 |
+| `HandlerMethodValidationException` | 400 | 方法级参数校验异常 |
 | `HttpMessageNotReadableException` | 400 | JSON 解析异常 |
 | `HttpRequestMethodNotSupportedException` | 405 | 请求方法不支持 |
 | `DuplicateKeyException` | 500 | 数据库唯一键冲突 |
@@ -428,14 +449,17 @@ public static final String REQUEST_ERROR_MSG = "请求参数格式错误";
 public static final String DUPLICATEKEY_ERROR_MSG = "系统已经存在该记录";
 ```
 
-可以通过继承 `MyBaseController` 并重写常量来自定义：
+可以通过两种方式自定义：
+
+1. 提供你自己的 `MyMvcExceptionHandler` Bean，覆盖默认自动装配。
+2. 继承 `MyBaseController` 并重写对应的异常处理方法。
 
 ```java
-@RestController
 public class CustomController extends MyBaseController {
-    static {
-        LOGIN_ERROR_MSG = "请先登录系统";
-        PERMISSION_ERROR_MSG = "权限不足";
+
+    @Override
+    protected MyResponseResult handleException(Exception e) {
+        return doJsonMsg(500, "自定义错误提示");
     }
 }
 ```
@@ -464,7 +488,36 @@ public class CustomController extends MyBaseController {
 
 ## 配置项
 
-目前 Starter 采用零配置设计，所有功能自动启用。如需禁用某些功能，可以通过排除自动配置类：
+Starter 默认开箱即用，同时支持通过 `mymvc.*` 调整核心行为：
+
+| 配置项 | 默认值 | 说明 |
+|------|------|------|
+| `mymvc.exception-handler.enabled` | `true` | 是否启用默认全局异常 `@RestControllerAdvice` |
+| `mymvc.response.success-code` | `200` | 成功响应默认业务码 |
+| `mymvc.response.success-message` | `OK` | `doJsonOut(data)` 的默认消息 |
+| `mymvc.response.default-success-message` | `操作成功` | `doJsonDefaultMsg()` 的默认消息 |
+| `mymvc.messages.login-error` | `非法授权,请先登录` | 认证失败提示 |
+| `mymvc.messages.permission-error` | `您没有权限，请联系管理员授权` | 权限失败提示 |
+| `mymvc.messages.request-error` | `请求参数格式错误` | 通用请求错误提示 |
+| `mymvc.messages.duplicate-key-error` | `系统已经存在该记录` | 唯一键冲突提示 |
+| `mymvc.messages.fallback-error` | `请求失败,请稍后再试` | 未知异常提示 |
+| `mymvc.messages.json-parse-error` | `JSON格式错误，请检查请求参数` | JSON 解析失败提示 |
+| `mymvc.messages.json-type-error` | `参数类型错误，请检查数据类型` | JSON 类型不匹配提示 |
+| `mymvc.messages.missing-request-body-error` | `缺少请求体` | 请求体缺失提示 |
+
+例如：
+
+```yaml
+mymvc:
+  exception-handler:
+    enabled: true
+  response:
+    default-success-message: 处理完成
+  messages:
+    fallback-error: 系统繁忙，请稍后再试
+```
+
+如需彻底关闭 Starter 自动配置，也可以直接排除自动配置类：
 
 ```java
 @SpringBootApplication(exclude = {
@@ -484,6 +537,7 @@ public class Application {
 ```java
 @RestController
 @RequestMapping("/api/products")
+@Validated
 public class ProductController extends MyBaseController {
 
     @Autowired
@@ -501,7 +555,6 @@ public class ProductController extends MyBaseController {
     }
 
     @GetMapping("/{id}")
-    @Validated
     public MyResponseResult<Product> get(
         @Number(min = 1, message = "ID必须大于0") @PathVariable String id
     ) {
@@ -558,10 +611,12 @@ public class ProductDTO {
 ### Q: 为什么校验不生效？
 
 **A:** 请确保：
-1. Controller 继承了 `MyBaseController`
-2. 方法参数上添加了 `@Valid`（实体校验）或方法上添加了 `@Validated`（参数校验）
-3. Maven 依赖正确引入
-4. 项目中有 `spring-boot-starter-web` 或 `spring-boot-starter-validation` 依赖
+1. 如果你要使用 `doJsonOut` / `doJsonMsg` 等快捷方法，Controller 需要继承 `MyBaseController`
+2. 请求体参数上添加了 `@Valid`，方法参数校验请在类或方法上添加 `@Validated`
+3. Maven 依赖正确引入，尤其是 `spring-boot-starter-validation`
+4. 如果要启用方法参数切面，请额外引入 `spring-boot-starter-aop`
+
+仅使用全局异常处理时，不继承 `MyBaseController` 也可以。
 
 ### Q: 如何自定义错误消息格式？
 
@@ -589,10 +644,12 @@ age 年龄必须在0-150之间
 idCard 请输入有效的身份证号
 ```
 
-如果有多个字段校验失败，会按字母顺序排列：
+如需稳定输出真实参数名而不是 `arg0`、`arg1`，请确保应用在编译时开启了 `-parameters`。
+
+如果有多个字段校验失败，会按字母顺序排列并用逗号连接：
 
 ```
-[age 年龄必须在0-150之间, name 姓名长度必须在2-50字符之间]
+age 年龄必须在0-150之间,name 姓名长度必须在2-50字符之间
 ```
 
 ### Q: 如何禁用某个校验器？
