@@ -5,29 +5,34 @@ import io.github.canjiemo.base.mymvc.privacy.fastjson.PrivacyFastjsonFilter;
 import io.github.canjiemo.base.mymvc.privacy.fastjson2.PrivacyFastjson2Filter;
 import io.github.canjiemo.base.mymvc.privacy.jackson.PrivacyJacksonModule;
 import jakarta.validation.Validator;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.Ordered;
 
 @AutoConfiguration
 @ConditionalOnWebApplication
-@ConditionalOnClass({RequestParamValidAspect.class})
-public class MyMvcAutoConfiguration implements BeanPostProcessor, Ordered {
+public class MyMvcAutoConfiguration {
 
-    @Bean
-    @ConditionalOnMissingBean
-    public RequestParamValidAspect getRequestParamValidAspect(Validator validator){
-        return new RequestParamValidAspect(validator);
-    }
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = {
+            "io.github.canjiemo.base.mymvc.aspect.RequestParamValidAspect",
+            "jakarta.validation.Validator",
+            "org.aspectj.lang.annotation.Aspect",
+            "org.springframework.aop.aspectj.annotation.AnnotationAwareAspectJAutoProxyCreator",
+            "org.springframework.validation.annotation.Validated"
+    })
+    static class ValidationConfig {
 
-    @Override
-    public int getOrder() {
-        return 0;
+        @Bean
+        @ConditionalOnMissingBean(RequestParamValidAspect.class)
+        @ConditionalOnBean(Validator.class)
+        public RequestParamValidAspect requestParamValidAspect(Validator validator) {
+            return new RequestParamValidAspect(validator);
+        }
     }
 
     /**

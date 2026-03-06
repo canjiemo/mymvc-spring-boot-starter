@@ -4,7 +4,7 @@ package io.github.canjiemo.base.mymvc.controller;
 import io.github.canjiemo.base.mymvc.data.MyResponseResult;
 import io.github.canjiemo.mycommon.exception.BaseException;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.hibernate.validator.internal.engine.ConstraintViolationImpl;
+import org.springframework.context.MessageSourceResolvable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -13,14 +13,18 @@ import org.springframework.util.StringUtils;
 import org.springframework.validation.BindException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
-import java.util.Collections;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MyBaseController {
 
@@ -67,16 +71,16 @@ public class MyBaseController {
 	 * 处理自定义异常
 	 */
 	@ExceptionHandler(BaseException.class)
-	private MyResponseResult handleException(BaseException e){
+	protected MyResponseResult handleException(BaseException e){
 		return doJsonMsg(e.getCode(), e.getMessage());
 	}
 
 	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-	private MyResponseResult handleDuplicateKeyException(HttpRequestMethodNotSupportedException e){
+	protected MyResponseResult handleDuplicateKeyException(HttpRequestMethodNotSupportedException e){
 		return doJsonMsg(HttpStatus.METHOD_NOT_ALLOWED.value(), e.getMessage());
 	}
 	@ExceptionHandler(HttpMessageNotReadableException.class)
-	private MyResponseResult handleHttpMessageNotReadableException(HttpMessageNotReadableException e){
+	protected MyResponseResult handleHttpMessageNotReadableException(HttpMessageNotReadableException e){
 		String message = e.getMessage();
 		log.warn("JSON解析异常: {}", message);
 
@@ -95,37 +99,77 @@ public class MyBaseController {
 	}
 
 	@ExceptionHandler(BindException.class)
-	private MyResponseResult handleException(BindException e){
+	protected MyResponseResult handleException(BindException e){
 		BindingResult bindingResult = e.getBindingResult();
 		return doJsonMsg(HttpStatus.BAD_REQUEST.value(), getErrorsMsg(bindingResult));
 	}
 
+	@ExceptionHandler(MethodArgumentNotValidException.class)
+	protected MyResponseResult handleException(MethodArgumentNotValidException e){
+		return doJsonMsg(HttpStatus.BAD_REQUEST.value(), getErrorsMsg(e.getBindingResult()));
+	}
+
+	@ExceptionHandler(HandlerMethodValidationException.class)
+	protected MyResponseResult handleException(HandlerMethodValidationException e){
+		return doJsonMsg(HttpStatus.BAD_REQUEST.value(), getErrorsMsg(e));
+	}
+
 	private String getErrorsMsg(BindingResult result) {
-		List<String> errMsg = new LinkedList<>();
-		List<FieldError> list = result.getFieldErrors();
-		for (FieldError error : list) {
-			ConstraintViolationImpl<?> source = error.unwrap(ConstraintViolationImpl.class);
-			String messageTemplate = source.getMessageTemplate();
-			if (StringUtils.hasText(messageTemplate)
-					&& messageTemplate.contains("{")
-					&& messageTemplate.contains("}")) {
-				errMsg.add(String.format("%s %s", error.getField(), error.getDefaultMessage()));
-			} else {
-				errMsg.add(messageTemplate);
+		List<String> errMsg = new ArrayList<>();
+		for (FieldError error : result.getFieldErrors()) {
+			errMsg.add(resolveMessage(error));
+		}
+		for (ObjectError error : result.getGlobalErrors()) {
+			errMsg.add(resolveMessage(error));
+		}
+		return joinErrors(errMsg);
+	}
+
+	private String getErrorsMsg(HandlerMethodValidationException exception) {
+		List<String> errMsg = new ArrayList<>();
+		for (ParameterValidationResult validationResult : exception.getAllValidationResults()) {
+			String parameterName = validationResult.getMethodParameter().getParameterName();
+			for (MessageSourceResolvable error : validationResult.getResolvableErrors()) {
+				String message = resolveMessage(error);
+				if (StringUtils.hasText(parameterName) && StringUtils.hasText(message)) {
+					errMsg.add(parameterName + " " + message);
+				} else {
+					errMsg.add(message);
+				}
 			}
 		}
-		Collections.sort(errMsg);
+		return joinErrors(errMsg);
+	}
 
-		// 如果没有错误信息，直接返回 null（或者 ""，看你的需求）
-		if (errMsg.isEmpty()) {
-			return null;  // 或者 return "";
+	private String resolveMessage(MessageSourceResolvable error) {
+		String message = error.getDefaultMessage();
+		if (StringUtils.hasText(message)) {
+			return message;
 		}
-		return String.join(",", errMsg);
+
+		String[] codes = error.getCodes();
+		if (codes != null && codes.length > 0) {
+			return codes[0];
+		}
+
+		return REQUEST_ERROR_MSG;
+	}
+
+	private String joinErrors(List<String> errMsg) {
+		List<String> messages = errMsg.stream()
+				.filter(StringUtils::hasText)
+				.distinct()
+				.sorted()
+				.collect(Collectors.toCollection(ArrayList::new));
+		if (messages.isEmpty()) {
+			return REQUEST_ERROR_MSG;
+		}
+		return String.join(",", messages);
 	}
 
 
 	@ExceptionHandler(Exception.class)
-	private MyResponseResult handleException(Exception e){
+	protected MyResponseResult handleException(Exception e){
 		Throwable te = ExceptionUtils.getRootCause(e);
 		if(te==null){
 			List<Throwable> throwableList = ExceptionUtils.getThrowableList(e);
@@ -142,7 +186,7 @@ public class MyBaseController {
 			return doJsonMsg(HttpStatus.FORBIDDEN.value(), PERMISSION_ERROR_MSG);
 		}
 		if(te.getClass().getName().equalsIgnoreCase("org.springframework.security.core.AuthenticationException")){
-			return doJsonMsg(HttpStatus.FORBIDDEN.value(), PERMISSION_ERROR_MSG);
+			return doJsonMsg(HttpStatus.FORBIDDEN.value(), LOGIN_ERROR_MSG);
 		}
 		if(te instanceof HttpMediaTypeNotSupportedException){
 			return doJsonMsg(HttpStatus.UNPROCESSABLE_ENTITY.value(), REQUEST_ERROR_MSG);

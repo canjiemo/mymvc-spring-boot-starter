@@ -28,9 +28,23 @@
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-web</artifactId>
 </dependency>
+
+<!-- 3. 如果需要 @Valid / @Validated 参数校验，补充以下依赖 -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-validation</artifactId>
+</dependency>
+
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-aop</artifactId>
+</dependency>
 ```
 
-> **说明**：本 Starter 使用 `optional` 依赖，不会强制引入 Spring 相关依赖，避免版本冲突。请确保你的项目中已有 `spring-boot-starter-web` 依赖。
+> **说明**：
+> 1. 本 Starter 使用 `optional` 依赖，不会强制引入 Spring 相关依赖，避免版本冲突。
+> 2. `MyBaseController` 的异常输出约定是 HTTP 层固定返回 `200`，业务成功与失败通过响应体中的 `code` 表达。
+> 3. `@Valid` / `@Validated` 相关能力依赖 `spring-boot-starter-validation`；方法参数切面还需要 `spring-boot-starter-aop`。
 
 ### 基本使用
 
@@ -91,7 +105,7 @@ public class UserController extends MyBaseController {
 继承 `MyBaseController` 后自动处理常见异常，也可以抛出自定义业务异常：
 
 ```java
-import io.github.mocanjie.base.mycommon.exception.BusinessException;
+import io.github.canjiemo.mycommon.exception.BusinessException;
 
 @Service
 public class UserService {
@@ -170,10 +184,12 @@ public class UserVO {
 | 框架 | 检测条件 | 说明 |
 |------|---------|------|
 | Jackson | classpath 含 `jackson-databind` | Spring Boot Web 默认集成，自动生效 |
-| Fastjson | classpath 含 `com.alibaba:fastjson` | 自动注册 `ValueFilter` |
-| Fastjson2 | classpath 含 `com.alibaba.fastjson2:fastjson2` | 自动注册 `ValueFilter` |
+| Fastjson | classpath 含 `com.alibaba:fastjson` | Starter 提供 `ValueFilter` Bean，需在应用侧注册到 Fastjson 配置 |
+| Fastjson2 | classpath 含 `com.alibaba.fastjson2:fastjson2` | Starter 提供 `ValueFilter` Bean，需在应用侧注册到 Fastjson2 配置 |
 
 三个框架可同时共存，各自处理自己的序列化路径。
+
+> **提示**：Jackson 下会自动拾取 `PrivacyJacksonModule`；Fastjson/Fastjson2 需要应用集成方将 `PrivacyFastjsonFilter` / `PrivacyFastjson2Filter` 挂到各自的 `HttpMessageConverter` 或序列化配置中。
 
 #### 4. 增强参数校验
 
@@ -215,14 +231,14 @@ public class UserController extends MyBaseController {
 
 ##### 4.2 方法参数校验
 
-使用 `@Validated` 注解在方法上启用参数级别的校验：
+使用 `@Validated` 注解在方法或类上启用参数级别的校验：
 
 ```java
 @RestController
+@Validated
 public class UserController extends MyBaseController {
 
     @GetMapping("/user/{id}")
-    @Validated // 启用方法参数校验
     public MyResponseResult getUser(
         @Number(min = 1, message = "用户ID必须大于0") @RequestParam String id
     ) {
@@ -244,7 +260,7 @@ private String idCard;
 ```
 
 **参数：**
-- `required`: 是否必填，默认 `false`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **校验规则：**
@@ -264,7 +280,7 @@ private String score;
 ```
 
 **参数：**
-- `required`: 是否必填，默认 `false`
+- `required`: 是否必填，默认 `true`
 - `min`: 最小值，默认 `Long.MIN_VALUE`
 - `max`: 最大值，默认 `Long.MAX_VALUE`
 - `integer`: 是否必须为整数，默认 `false`
@@ -296,8 +312,8 @@ private String boolValue;
 **参数：**
 - `value`: 允许的字符串值数组
 - `enumType`: 枚举类型配置（支持通过枚举字段值校验）
-- `ignoreCase`: 是否忽略大小写，默认 `false`
-- `required`: 是否必填，默认 `false`
+- `ignoreCase`: 是否忽略大小写，默认 `true`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **EnumType 参数：**
@@ -339,7 +355,7 @@ private String birthday;
 
 **参数：**
 - `format`: 日期格式（符合 `SimpleDateFormat` 规范）
-- `required`: 是否必填，默认 `false`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **常用格式：**
@@ -364,8 +380,8 @@ private String name;
 **参数：**
 - `min`: 最小长度，默认 `0`
 - `max`: 最大长度，默认 `Long.MAX_VALUE`
-- `chineseLength`: 一个中文字符计为几个长度，默认 `1`
-- `required`: 是否必填，默认 `false`
+- `chineseLength`: 一个中文字符计为几个长度，默认 `2`
+- `required`: 是否必填，默认 `true`
 - `message`: 自定义错误消息
 
 **长度计算规则：**
@@ -389,7 +405,7 @@ private String name;
 
 ```java
 import io.github.canjiemo.base.mymvc.validator.MyValidatorUtils;
-import io.github.mocanjie.base.mycommon.exception.BusinessException;
+import io.github.canjiemo.mycommon.exception.BusinessException;
 
 public class UserService {
 
@@ -404,13 +420,15 @@ public class UserService {
 
 ## 全局异常处理
 
-继承 `MyBaseController` 后，以下异常会被自动处理：
+继承 `MyBaseController` 后，以下异常会被自动处理。HTTP 层统一返回 `200`，错误类型体现在响应体的 `code` 字段中：
 
-| 异常类型 | HTTP状态码 | 说明 |
+| 异常类型 | 响应体 code | 说明 |
 |---------|-----------|------|
 | `BaseException` | 自定义 | 业务异常基类 |
 | `BusinessException` | 500 | 业务异常 |
 | `BindException` | 400 | 参数绑定异常（Bean Validation） |
+| `MethodArgumentNotValidException` | 400 | `@RequestBody` Bean Validation 异常 |
+| `HandlerMethodValidationException` | 400 | 方法级参数校验异常 |
 | `HttpMessageNotReadableException` | 400 | JSON 解析异常 |
 | `HttpRequestMethodNotSupportedException` | 405 | 请求方法不支持 |
 | `DuplicateKeyException` | 500 | 数据库唯一键冲突 |
@@ -428,14 +446,14 @@ public static final String REQUEST_ERROR_MSG = "请求参数格式错误";
 public static final String DUPLICATEKEY_ERROR_MSG = "系统已经存在该记录";
 ```
 
-可以通过继承 `MyBaseController` 并重写常量来自定义：
+可以通过继承 `MyBaseController` 并重写对应的异常处理方法来自定义：
 
 ```java
-@RestController
 public class CustomController extends MyBaseController {
-    static {
-        LOGIN_ERROR_MSG = "请先登录系统";
-        PERMISSION_ERROR_MSG = "权限不足";
+
+    @Override
+    protected MyResponseResult handleException(Exception e) {
+        return doJsonMsg(500, "自定义错误提示");
     }
 }
 ```
@@ -484,6 +502,7 @@ public class Application {
 ```java
 @RestController
 @RequestMapping("/api/products")
+@Validated
 public class ProductController extends MyBaseController {
 
     @Autowired
@@ -501,7 +520,6 @@ public class ProductController extends MyBaseController {
     }
 
     @GetMapping("/{id}")
-    @Validated
     public MyResponseResult<Product> get(
         @Number(min = 1, message = "ID必须大于0") @PathVariable String id
     ) {
@@ -559,9 +577,9 @@ public class ProductDTO {
 
 **A:** 请确保：
 1. Controller 继承了 `MyBaseController`
-2. 方法参数上添加了 `@Valid`（实体校验）或方法上添加了 `@Validated`（参数校验）
-3. Maven 依赖正确引入
-4. 项目中有 `spring-boot-starter-web` 或 `spring-boot-starter-validation` 依赖
+2. 请求体参数上添加了 `@Valid`，方法参数校验请在类或方法上添加 `@Validated`
+3. Maven 依赖正确引入，尤其是 `spring-boot-starter-validation`
+4. 如果要启用方法参数切面，请额外引入 `spring-boot-starter-aop`
 
 ### Q: 如何自定义错误消息格式？
 
@@ -589,10 +607,12 @@ age 年龄必须在0-150之间
 idCard 请输入有效的身份证号
 ```
 
-如果有多个字段校验失败，会按字母顺序排列：
+如需稳定输出真实参数名而不是 `arg0`、`arg1`，请确保应用在编译时开启了 `-parameters`。
+
+如果有多个字段校验失败，会按字母顺序排列并用逗号连接：
 
 ```
-[age 年龄必须在0-150之间, name 姓名长度必须在2-50字符之间]
+age 年龄必须在0-150之间,name 姓名长度必须在2-50字符之间
 ```
 
 ### Q: 如何禁用某个校验器？

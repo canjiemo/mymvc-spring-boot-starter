@@ -5,6 +5,7 @@ import io.github.canjiemo.mycommon.exception.BusinessException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
+import org.hibernate.validator.messageinterpolation.ParameterMessageInterpolator;
 
 import java.util.Set;
 
@@ -12,7 +13,11 @@ public class MyValidatorUtils {
     private static Validator validator;
 
     static {
-        validator = Validation.buildDefaultValidatorFactory().getValidator();
+        validator = Validation.byDefaultProvider()
+                .configure()
+                .messageInterpolator(new ParameterMessageInterpolator())
+                .buildValidatorFactory()
+                .getValidator();
     }
 
     public static void validateEntity(Object object, Class<?>... groups)

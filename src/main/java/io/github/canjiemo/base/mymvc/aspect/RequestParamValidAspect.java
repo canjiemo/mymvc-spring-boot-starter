@@ -2,6 +2,7 @@ package io.github.canjiemo.base.mymvc.aspect;
 
 import io.github.canjiemo.mycommon.exception.BusinessException;
 import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ElementKind;
 import jakarta.validation.Path;
 import jakarta.validation.Validator;
 import jakarta.validation.executable.ExecutableValidator;
@@ -10,10 +11,14 @@ import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.annotation.Pointcut;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.ParameterNameDiscoverer;
+import org.springframework.util.StringUtils;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -22,14 +27,14 @@ import java.util.stream.Collectors;
 
 /**
  * spring mvc 请求参数验证拦截
- * 拦截所有带有@org.springframework.validation.annotation.Validated注解的controller
+ * 拦截所有带有@org.springframework.validation.annotation.Validated注解的方法或类
  * @author mo
  *
  */
 @Aspect
 public class RequestParamValidAspect {
 
-    @Pointcut("@annotation(org.springframework.validation.annotation.Validated) ")
+    @Pointcut("@annotation(org.springframework.validation.annotation.Validated) || @within(org.springframework.validation.annotation.Validated)")
     public void controllerBefore(){};
 
     private final ParameterNameDiscoverer parameterNameDiscoverer = new DefaultParameterNameDiscoverer();
@@ -40,32 +45,58 @@ public class RequestParamValidAspect {
     }
 
     @Before("controllerBefore()")
-    public void before(JoinPoint point) throws NoSuchMethodException, SecurityException{
-        //  获得切入目标对象
+    public void before(JoinPoint point){
         Object target = point.getThis();
-        // 获得切入方法参数
         Object [] args = point.getArgs();
-        // 获得切入的方法
-        Method method = ((MethodSignature)point.getSignature()).getMethod();
-        // 执行校验，获得校验结果
+        Method interfaceMethod = ((MethodSignature)point.getSignature()).getMethod();
+        Method method = AopUtils.getMostSpecificMethod(interfaceMethod, target.getClass());
         Set<ConstraintViolation<Object>> validResult = validMethodParams(target, method, args);
         if (!validResult.isEmpty()) {
-            String [] parameterNames = parameterNameDiscoverer.getParameterNames(method); // 获得方法的参数名称
-            List<String> errors = validResult.stream().map(constraintViolation -> {
-                Path propertyPath = constraintViolation.getPropertyPath();  // 获得校验的参数路径信息
-                Path.Node leafNode = null;
-                for (Path.Node node : propertyPath) {
-                    leafNode = node;  // 获取最后一个节点
-                }
-                int paramIndex = leafNode.as(Path.ParameterNode.class).getParameterIndex(); // 获得校验的参数位置
-                String paramName = parameterNames[paramIndex];  // 获得校验的参数名称
-                return paramName + " " + constraintViolation.getMessage();
-            }).collect(Collectors.toList());
-            throw new BusinessException(errors.toString());  // 我个人的处理方式，抛出异常，交给上层处理
+            String [] parameterNames = parameterNameDiscoverer.getParameterNames(method);
+            List<String> errors = validResult.stream()
+                    .map(constraintViolation -> formatViolation(constraintViolation, method, parameterNames))
+                    .collect(Collectors.toCollection(LinkedHashSet::new))
+                    .stream()
+                    .toList();
+            throw new BusinessException(String.join(", ", errors));
         }
     }
 
     private <T> Set<ConstraintViolation<T>> validMethodParams(T obj, Method method, Object [] params){
         return executableValidator.validateParameters(obj, method, params);
+    }
+
+    private String formatViolation(ConstraintViolation<?> constraintViolation, Method method, String[] parameterNames) {
+        Integer paramIndex = null;
+        for (Path.Node node : constraintViolation.getPropertyPath()) {
+            if (node.getKind() == ElementKind.PARAMETER) {
+                paramIndex = node.as(Path.ParameterNode.class).getParameterIndex();
+                break;
+            }
+        }
+
+        String message = constraintViolation.getMessage();
+        if (paramIndex == null) {
+            return message;
+        }
+
+        String paramName = resolveParameterName(method, parameterNames, paramIndex);
+        if (StringUtils.hasText(paramName)) {
+            return paramName + " " + message;
+        }
+        return message;
+    }
+
+    private String resolveParameterName(Method method, String[] parameterNames, int paramIndex) {
+        if (parameterNames != null && paramIndex >= 0 && paramIndex < parameterNames.length) {
+            return parameterNames[paramIndex];
+        }
+
+        Parameter[] parameters = method.getParameters();
+        if (paramIndex >= 0 && paramIndex < parameters.length) {
+            return parameters[paramIndex].getName();
+        }
+
+        return null;
     }
 }
