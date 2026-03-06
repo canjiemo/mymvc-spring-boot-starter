@@ -1,21 +1,47 @@
 package io.github.canjiemo.base.mymvc.configuration;
 
 import io.github.canjiemo.base.mymvc.aspect.RequestParamValidAspect;
+import io.github.canjiemo.base.mymvc.controller.MyMvcExceptionHandler;
 import io.github.canjiemo.base.mymvc.privacy.fastjson.PrivacyFastjsonFilter;
 import io.github.canjiemo.base.mymvc.privacy.fastjson2.PrivacyFastjson2Filter;
 import io.github.canjiemo.base.mymvc.privacy.jackson.PrivacyJacksonModule;
+import io.github.canjiemo.base.mymvc.support.MyExceptionResponseResolver;
+import io.github.canjiemo.base.mymvc.support.MyResponseFactory;
 import jakarta.validation.Validator;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @AutoConfiguration
 @ConditionalOnWebApplication
+@EnableConfigurationProperties(MyMvcProperties.class)
 public class MyMvcAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MyResponseFactory myResponseFactory(MyMvcProperties properties) {
+        return new MyResponseFactory(properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public MyExceptionResponseResolver myExceptionResponseResolver(MyResponseFactory responseFactory,
+                                                                  MyMvcProperties properties) {
+        return new MyExceptionResponseResolver(responseFactory, properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MyMvcExceptionHandler.class)
+    @ConditionalOnProperty(prefix = "mymvc.exception-handler", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public MyMvcExceptionHandler myMvcExceptionHandler(MyExceptionResponseResolver exceptionResponseResolver) {
+        return new MyMvcExceptionHandler(exceptionResponseResolver);
+    }
 
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnClass(name = {

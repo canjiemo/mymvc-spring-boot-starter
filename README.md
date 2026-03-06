@@ -5,11 +5,11 @@
 ## 特性
 
 - 🚀 **统一响应封装** - 提供 `MyResponseResult<T>` 统一返回格式
-- 🛡️ **全局异常处理** - 继承 `MyBaseController` 自动处理常见异常
+- 🛡️ **全局异常处理** - 默认自动注册 `@RestControllerAdvice`，也兼容 `MyBaseController`
 - ✅ **增强参数校验** - 提供 5 种开箱即用的自定义校验器
 - 🔒 **隐私字段脱敏** - `@Privacy` 注解自动遮蔽响应 DTO 中的敏感字段，支持 Jackson / Fastjson / Fastjson2
 - 🎯 **零侵入集成** - 基于 Spring Boot 自动装配，引入即可使用
-- ⚡ **轻量灵活** - optional 依赖设计，容器中立，依赖注入优化
+- ⚡ **轻量灵活** - optional 依赖设计，容器中立，支持配置化覆盖默认行为
 
 ## 快速开始
 
@@ -45,6 +45,7 @@
 > 1. 本 Starter 使用 `optional` 依赖，不会强制引入 Spring 相关依赖，避免版本冲突。
 > 2. `MyBaseController` 的异常输出约定是 HTTP 层固定返回 `200`，业务成功与失败通过响应体中的 `code` 表达。
 > 3. `@Valid` / `@Validated` 相关能力依赖 `spring-boot-starter-validation`；方法参数切面还需要 `spring-boot-starter-aop`。
+> 4. 全局异常处理默认自动启用；如果你只需要异常兜底，不必继承 `MyBaseController`。
 
 ### 基本使用
 
@@ -100,9 +101,11 @@ public class UserController extends MyBaseController {
 }
 ```
 
-#### 2. 自定义异常处理
+#### 2. 全局异常处理
 
-继承 `MyBaseController` 后自动处理常见异常，也可以抛出自定义业务异常：
+Starter 默认注册全局 `@RestControllerAdvice` 处理常见异常；如果你还想使用 `doJsonOut` / `doJsonMsg` 这类快捷方法，再继承 `MyBaseController`。
+
+业务代码里可以直接抛出自定义业务异常：
 
 ```java
 import io.github.canjiemo.mycommon.exception.BusinessException;
@@ -420,7 +423,7 @@ public class UserService {
 
 ## 全局异常处理
 
-继承 `MyBaseController` 后，以下异常会被自动处理。HTTP 层统一返回 `200`，错误类型体现在响应体的 `code` 字段中：
+启用 Starter 后，以下异常会被自动处理。HTTP 层统一返回 `200`，错误类型体现在响应体的 `code` 字段中：
 
 | 异常类型 | 响应体 code | 说明 |
 |---------|-----------|------|
@@ -446,7 +449,10 @@ public static final String REQUEST_ERROR_MSG = "请求参数格式错误";
 public static final String DUPLICATEKEY_ERROR_MSG = "系统已经存在该记录";
 ```
 
-可以通过继承 `MyBaseController` 并重写对应的异常处理方法来自定义：
+可以通过两种方式自定义：
+
+1. 提供你自己的 `MyMvcExceptionHandler` Bean，覆盖默认自动装配。
+2. 继承 `MyBaseController` 并重写对应的异常处理方法。
 
 ```java
 public class CustomController extends MyBaseController {
@@ -482,7 +488,36 @@ public class CustomController extends MyBaseController {
 
 ## 配置项
 
-目前 Starter 采用零配置设计，所有功能自动启用。如需禁用某些功能，可以通过排除自动配置类：
+Starter 默认开箱即用，同时支持通过 `mymvc.*` 调整核心行为：
+
+| 配置项 | 默认值 | 说明 |
+|------|------|------|
+| `mymvc.exception-handler.enabled` | `true` | 是否启用默认全局异常 `@RestControllerAdvice` |
+| `mymvc.response.success-code` | `200` | 成功响应默认业务码 |
+| `mymvc.response.success-message` | `OK` | `doJsonOut(data)` 的默认消息 |
+| `mymvc.response.default-success-message` | `操作成功` | `doJsonDefaultMsg()` 的默认消息 |
+| `mymvc.messages.login-error` | `非法授权,请先登录` | 认证失败提示 |
+| `mymvc.messages.permission-error` | `您没有权限，请联系管理员授权` | 权限失败提示 |
+| `mymvc.messages.request-error` | `请求参数格式错误` | 通用请求错误提示 |
+| `mymvc.messages.duplicate-key-error` | `系统已经存在该记录` | 唯一键冲突提示 |
+| `mymvc.messages.fallback-error` | `请求失败,请稍后再试` | 未知异常提示 |
+| `mymvc.messages.json-parse-error` | `JSON格式错误，请检查请求参数` | JSON 解析失败提示 |
+| `mymvc.messages.json-type-error` | `参数类型错误，请检查数据类型` | JSON 类型不匹配提示 |
+| `mymvc.messages.missing-request-body-error` | `缺少请求体` | 请求体缺失提示 |
+
+例如：
+
+```yaml
+mymvc:
+  exception-handler:
+    enabled: true
+  response:
+    default-success-message: 处理完成
+  messages:
+    fallback-error: 系统繁忙，请稍后再试
+```
+
+如需彻底关闭 Starter 自动配置，也可以直接排除自动配置类：
 
 ```java
 @SpringBootApplication(exclude = {
@@ -576,10 +611,12 @@ public class ProductDTO {
 ### Q: 为什么校验不生效？
 
 **A:** 请确保：
-1. Controller 继承了 `MyBaseController`
+1. 如果你要使用 `doJsonOut` / `doJsonMsg` 等快捷方法，Controller 需要继承 `MyBaseController`
 2. 请求体参数上添加了 `@Valid`，方法参数校验请在类或方法上添加 `@Validated`
 3. Maven 依赖正确引入，尤其是 `spring-boot-starter-validation`
 4. 如果要启用方法参数切面，请额外引入 `spring-boot-starter-aop`
+
+仅使用全局异常处理时，不继承 `MyBaseController` 也可以。
 
 ### Q: 如何自定义错误消息格式？
 
