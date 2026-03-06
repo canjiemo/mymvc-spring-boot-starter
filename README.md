@@ -18,7 +18,7 @@
 ```xml
 <!-- 1. 添加本 Starter -->
 <dependency>
-    <groupId>io.github.mocanjie</groupId>
+    <groupId>io.github.canjiemo</groupId>
     <artifactId>mymvc-spring-boot-starter</artifactId>
     <version>[版本号]</version>
 </dependency>
@@ -388,7 +388,7 @@ private String name;
 除了注解式校验，还可以使用工具类进行编程式校验：
 
 ```java
-import io.github.mocanjie.base.mymvc.validator.MyValidatorUtils;
+import io.github.canjiemo.base.mymvc.validator.MyValidatorUtils;
 import io.github.mocanjie.base.mycommon.exception.BusinessException;
 
 public class UserService {
@@ -661,7 +661,7 @@ public class JacksonConfig {
 ```xml
 <!-- 业务异常基类 -->
 <dependency>
-    <groupId>io.github.mocanjie</groupId>
+    <groupId>io.github.canjiemo</groupId>
     <artifactId>mycommon</artifactId>
 </dependency>
 
@@ -718,8 +718,8 @@ public class JacksonConfig {
 ## 联系方式
 
 - **作者**: mocanjie
-- **邮箱**: mocanjie@qq.com
-- **GitHub**: [https://github.com/mocanjie/mymvc-spring-boot-starter](https://github.com/mocanjie/mymvc-spring-boot-starter)
+- **邮箱**: canjiemo@gmail.com
+- **GitHub**: [https://github.com/canjiemo/mymvc-spring-boot-starter](https://github.com/canjiemo/mymvc-spring-boot-starter)
 
 ## 贡献
 
