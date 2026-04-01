@@ -790,4 +790,31 @@ public class JacksonConfig {
 
 ---
 
+## Claude Code Skill
+
+本项目提供了一个 [Claude Code](https://claude.ai/code) Skill，让 AI 在帮你写代码时自动理解本 Starter 的 API、注解用法和最佳实践，避免生成不符合本库约定的代码。
+
+### 安装方式
+
+**方式一：一行命令（推荐）**
+
+```bash
+mkdir -p ~/.claude/skills/mymvc-dev && curl -fsSL https://raw.githubusercontent.com/canjiemo/mymvc-spring-boot-starter/master/claude-skills/mymvc-dev/SKILL.md -o ~/.claude/skills/mymvc-dev/SKILL.md
+```
+
+**方式二：克隆后复制**
+
+```bash
+mkdir -p ~/.claude/skills/mymvc-dev && cp claude-skills/mymvc-dev/SKILL.md ~/.claude/skills/mymvc-dev/SKILL.md
+```
+
+安装完成后，Claude Code 会在你的项目中涉及以下场景时自动加载此 Skill：
+
+- 使用 `MyResponseResult`、`MyBaseController`、`@Privacy` 等类/注解
+- 配置 `mymvc.*` 属性
+- 使用 `@Date`、`@IdCard`、`@Number`、`@ValIn`、`@LimitLength` 自定义校验器
+- 需要统一响应格式、全局异常处理、隐私脱敏等功能
+
+---
+
 **如果这个项目对你有帮助，请给个 Star ⭐️ 支持一下！**
