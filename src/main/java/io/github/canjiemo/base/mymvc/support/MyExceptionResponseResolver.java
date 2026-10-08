@@ -110,7 +110,7 @@ public class MyExceptionResponseResolver {
 
     private String getErrorsMsg(HandlerMethodValidationException exception) {
         List<String> errMsg = new ArrayList<>();
-        for (ParameterValidationResult validationResult : exception.getAllValidationResults()) {
+        for (ParameterValidationResult validationResult : exception.getParameterValidationResults()) {
             String parameterName = validationResult.getMethodParameter().getParameterName();
             for (MessageSourceResolvable error : validationResult.getResolvableErrors()) {
                 String message = resolveMessage(error);
@@ -120,6 +120,9 @@ public class MyExceptionResponseResolver {
                     errMsg.add(message);
                 }
             }
+        }
+        for (MessageSourceResolvable error : exception.getCrossParameterValidationResults()) {
+            errMsg.add(resolveMessage(error));
         }
         return joinErrors(errMsg);
     }

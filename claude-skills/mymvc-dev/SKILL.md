@@ -10,13 +10,13 @@ description: |
   - 用户需要中文身份证、日期格式、数值范围、值域枚举等自定义参数校验
   - 用户需要对接口响应字段做脱敏处理（手机号、姓名、身份证、银行卡等）
   - 配置 mymvc.* 相关属性
-  这是一个 Spring Boot 3.2+ MVC 增强 starter，提供响应封装/异常处理/参数校验/隐私脱敏四大能力，
+  当前是 JDK 25 分支，已验证 Spring Boot 4.1.1，提供响应封装/异常处理/参数校验/隐私脱敏四大能力，
   请务必使用此 skill 确保用法、配置和扩展方式的正确性。
 ---
 
 # mymvc-spring-boot-starter 开发指南
 
-本 starter 为 Spring Boot 3.2+ Web 项目提供四大开箱即用能力：**统一响应封装**、**全局异常处理**、**自定义参数校验**、**隐私字段脱敏**。引入依赖后自动装配，零样板代码。
+本 starter 当前 JDK 25 分支已验证 Spring Boot 4.1.1，为 Web 项目提供四大开箱即用能力：**统一响应封装**、**全局异常处理**、**自定义参数校验**、**隐私字段脱敏**。引入依赖后自动装配，零样板代码。
 
 ---
 
@@ -27,13 +27,13 @@ description: |
 <dependency>
     <groupId>io.github.canjiemo</groupId>
     <artifactId>mymvc-spring-boot-starter</artifactId>
-    <version>1.0.2-jdk21</version>
+    <version>2.0.0-jdk25-SNAPSHOT</version>
 </dependency>
 
 <!-- Spring Web（必须，需显式引入） -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
+    <artifactId>spring-boot-starter-webmvc</artifactId>
 </dependency>
 
 <!-- 参数校验（可选，使用 @Valid/@Validated 及自定义验证器时需要） -->
@@ -45,11 +45,13 @@ description: |
 <!-- AOP 支持（可选，使用方法参数校验切面时需要） -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-aop</artifactId>
+    <artifactId>spring-boot-starter-aspectj</artifactId>
 </dependency>
 ```
 
-**运行环境要求**：Java 21+、Spring Boot 3.2.0+
+**运行环境要求**：JDK 25；当前本地验证版本为 Spring Boot 4.1.1、Spring Framework 7.0.9。当前分支面向 Boot 4.1.x，默认使用 Jackson 3；历史 Boot 3 项目使用原发布制品。
+
+**本地构建**：使用 Temurin JDK 25 执行 `mvn clean install -Dgpg.skip=true`。若业务 DTO 使用 Lombok，应显式配置 Lombok 1.18.46 的 `annotationProcessorPaths`；JDK 25 下不要依赖 classpath 自动扫描处理器。
 
 **注意**：所有 Spring 依赖在 starter 中标记为 `<optional>true</optional>`，需在引入方项目中显式声明。
 
@@ -283,7 +285,7 @@ MyValidatorUtils.validateEntity(dto, CreateGroup.class);
 
 ## 五、隐私字段脱敏
 
-在响应对象的字段上添加 `@Privacy` 注解，序列化时自动脱敏。支持 Jackson（默认）、Fastjson、Fastjson2，按类路径自动激活。
+在响应对象的字段上添加 `@Privacy` 注解，序列化时自动脱敏。支持 Jackson 3（Boot 4 默认）、Jackson 2 可选适配、Fastjson、Fastjson2，按类路径自动激活。
 
 ### 预设脱敏策略
 

@@ -5,6 +5,7 @@ import io.github.canjiemo.base.mymvc.controller.MyMvcExceptionHandler;
 import io.github.canjiemo.base.mymvc.privacy.fastjson.PrivacyFastjsonFilter;
 import io.github.canjiemo.base.mymvc.privacy.fastjson2.PrivacyFastjson2Filter;
 import io.github.canjiemo.base.mymvc.privacy.jackson.PrivacyJacksonModule;
+import io.github.canjiemo.base.mymvc.privacy.jackson3.PrivacyJackson3Module;
 import io.github.canjiemo.base.mymvc.support.MyExceptionResponseResolver;
 import io.github.canjiemo.base.mymvc.support.MyResponseFactory;
 import jakarta.validation.Validator;
@@ -19,7 +20,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @AutoConfiguration
-@ConditionalOnWebApplication
+@ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @EnableConfigurationProperties(MyMvcProperties.class)
 public class MyMvcAutoConfiguration {
 
@@ -58,6 +59,17 @@ public class MyMvcAutoConfiguration {
         @ConditionalOnBean(Validator.class)
         public RequestParamValidAspect requestParamValidAspect(Validator validator) {
             return new RequestParamValidAspect(validator);
+        }
+    }
+
+    /** Jackson 3 为 Spring Boot 4 的默认 JSON 库，配置与 Jackson 2 分别隔离。 */
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "tools.jackson.databind.ObjectMapper")
+    static class Jackson3PrivacyConfig {
+        @Bean
+        @ConditionalOnMissingBean(PrivacyJackson3Module.class)
+        public PrivacyJackson3Module privacyJackson3Module() {
+            return new PrivacyJackson3Module();
         }
     }
 

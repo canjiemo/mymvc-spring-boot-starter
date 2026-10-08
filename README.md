@@ -2,6 +2,42 @@
 
 一个轻量级的 Spring Boot MVC 增强 Starter，提供统一响应封装、全局异常处理、增强参数校验、隐私字段脱敏等功能。
 
+## JDK 25 本地开发版本
+
+当前分支 `feature/jdk25` 使用 `2.0.0-jdk25-SNAPSHOT`，最低编译及运行版本为 JDK 25。历史 JDK 21 版本保留在原分支及原发布坐标中。
+
+当前适配目标为 Eclipse Temurin 25、Spring Boot 4.1.x、Spring Framework 7 和 Lombok 1.18.46，构建固定 Spring Boot 4.1.1。
+
+依赖由 Boot 4.1.1 BOM 管理，默认 JSON 使用 Jackson 3；保留 Jackson 2 的可选脱敏适配。当前分支服务 Servlet MVC，不承诺 Boot 3 或 WebFlux 兼容。原 JDK 21／Boot 3 发布坐标保留。
+
+```bash
+export JAVA_HOME=$(/usr/libexec/java_home -v 25) # macOS；其他环境设置为实际 JDK 25 路径
+mvn clean install -Dgpg.skip=true
+```
+
+本仓库显式配置 Lombok 与 Spring Boot 配置元数据处理器。使用方自行声明的 Lombok DTO 也需要配置注解处理器，否则 JDK 25 下可能缺少 getter，影响 JSON 序列化。正式版本为 `2.0.0-jdk25`，在适配和联调稳定后单独发布。
+
+### Boot 4.1 联合验证
+
+验证日期：2026-10-04；环境：Temurin 25.0.4.1+1／Maven 3.9.11。Boot 4.1.0 与 4.1.1 均运行组件测试及联合测试，未来补丁需按相同步骤重新验证后固定版本。
+
+| 验证对象 | 测试数 | 主要覆盖 |
+| --- | ---: | --- |
+| MyJDBC | 196 | SQL 改写、逻辑删除、租户隔离、审计填充及查询 |
+| MyMVC | 24 | 响应、异常、校验、Jackson 3 脱敏及 Jackson 可选依赖隔离 |
+| MyDict | 38 | 缓存、JDK 25 注解处理、Lombok 联合生成及 Boot 自动配置 |
+| 三组件联合项目 | 11 | 真实 Tomcat HTTP、自动装配、租户过滤、事务回滚、审计填充、生成字段输出、字符串大整数 ID、脱敏、AOP 和 Actuator 指标 |
+
+联合消费项目位于 [integration-tests/boot41](integration-tests/boot41/pom.xml)。先在三个组件仓库分别使用 JDK 25 执行 `mvn clean install -Dgpg.skip=true`，然后在本仓库根目录执行：
+
+```bash
+mvn -f integration-tests/boot41/pom.xml clean verify
+# 可选：复核已验证的另一个 4.1 补丁
+mvn -f integration-tests/boot41/pom.xml clean verify -Dspring-boot.version=4.1.0
+```
+
+测试通过标准自动配置发现三个组件，使用 Boot 自动配置的数据源与随机本地端口，仅作为组件兼容测试。H2 测试表在 Java 测试配置中初始化，不附 SQL 或 Python 文件。真实 PostgreSQL、Redis、业务权限、密码设备以及医院部署环境仍需建项目时验证。
+
 ## 特性
 
 - 🚀 **统一响应封装** - 提供 `MyResponseResult<T>` 统一返回格式
@@ -20,13 +56,13 @@
 <dependency>
     <groupId>io.github.canjiemo</groupId>
     <artifactId>mymvc-spring-boot-starter</artifactId>
-    <version>[版本号]</version>
+    <version>2.0.0-jdk25-SNAPSHOT</version>
 </dependency>
 
-<!-- 2. 确保项目中有 spring-boot-starter-web -->
+<!-- 2. 确保项目中有 spring-boot-starter-webmvc -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
+    <artifactId>spring-boot-starter-webmvc</artifactId>
 </dependency>
 
 <!-- 3. 如果需要 @Valid / @Validated 参数校验，补充以下依赖 -->
@@ -37,14 +73,14 @@
 
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-aop</artifactId>
+    <artifactId>spring-boot-starter-aspectj</artifactId>
 </dependency>
 ```
 
 > **说明**：
 > 1. 本 Starter 使用 `optional` 依赖，不会强制引入 Spring 相关依赖，避免版本冲突。
 > 2. `MyBaseController` 的异常输出约定是 HTTP 层固定返回 `200`，业务成功与失败通过响应体中的 `code` 表达。
-> 3. `@Valid` / `@Validated` 相关能力依赖 `spring-boot-starter-validation`；方法参数切面还需要 `spring-boot-starter-aop`。
+> 3. `@Valid` / `@Validated` 相关能力依赖 `spring-boot-starter-validation`；方法参数切面还需要 `spring-boot-starter-aspectj`。
 > 4. 全局异常处理默认自动启用；如果你只需要异常兜底，不必继承 `MyBaseController`。
 
 ### 基本使用
@@ -186,13 +222,14 @@ public class UserVO {
 
 | 框架 | 检测条件 | 说明 |
 |------|---------|------|
-| Jackson | classpath 含 `jackson-databind` | Spring Boot Web 默认集成，自动生效 |
+| Jackson 3 | classpath 含 `tools.jackson.core:jackson-databind` | Boot 4 默认 JsonMapper 自动注册 `PrivacyJackson3Module` |
+| Jackson 2 | classpath 含 `com.fasterxml.jackson.core:jackson-databind` | 保留 `PrivacyJacksonModule`；应用需实际使用并注册到 Jackson 2 mapper |
 | Fastjson | classpath 含 `com.alibaba:fastjson` | Starter 提供 `ValueFilter` Bean，需在应用侧注册到 Fastjson 配置 |
 | Fastjson2 | classpath 含 `com.alibaba.fastjson2:fastjson2` | Starter 提供 `ValueFilter` Bean，需在应用侧注册到 Fastjson2 配置 |
 
-三个框架可同时共存，各自处理自己的序列化路径。
+这些 JSON 库可同时共存，各自处理自己的序列化路径。
 
-> **提示**：Jackson 下会自动拾取 `PrivacyJacksonModule`；Fastjson/Fastjson2 需要应用集成方将 `PrivacyFastjsonFilter` / `PrivacyFastjson2Filter` 挂到各自的 `HttpMessageConverter` 或序列化配置中。
+> **提示**：Boot 4 默认自动配置的 JsonMapper 会拾取 `PrivacyJackson3Module`。自行创建 mapper 时，必须在 builder 中显式 `addModule`；Fastjson/Fastjson2 需要将对应 filter 挂到实际使用的序列化配置中。脱敏只改变输出，不修改 DTO 原始值，也不替代存储加密或权限检查。
 
 #### 4. 增强参数校验
 
@@ -466,25 +503,25 @@ public class CustomController extends MyBaseController {
 
 ## 技术栈
 
-- **Java 17+**
-- **Spring Boot 3.2.0+**
-- **Spring Framework 6.1.0+**
-- **Jakarta Validation 3.0.2**
-- **Hibernate Validator 8.0+**
-- **Apache Commons Lang3 3.12.0**
-- **AspectJ 1.9.21**
+- **Java 25**
+- **Spring Boot 4.1.1**
+- **Spring Framework 7.0.9**
+- **Jackson 3.1.5（默认）；Jackson 2.21.5（可选适配）**
+- **Jakarta Validation 3.1.1／Servlet 6.1**
+- **Hibernate Validator 9.1.3.Final**
+- **Apache Commons Lang3 3.20.0**
+- **AspectJ 1.9.25.1**
 
 ## 兼容性
 
-- ✅ Spring Boot 3.x
-- ✅ Spring Framework 6.x
-- ✅ Java 17+
-- ✅ Jakarta EE 9+
-- ✅ 容器中立（Tomcat / Jetty / Undertow）
+- ✅ Spring Boot 4.1.x；构建固定 4.1.1
+- ✅ Spring Framework 7
+- ✅ Eclipse Temurin JDK 25
+- ✅ Servlet 6.1；联合验证使用 Tomcat 11
 
 > **注意**：
-> 1. 本项目使用 `jakarta.*` 命名空间，不兼容 Spring Boot 2.x 及以下版本
-> 2. 本 Starter 不强制指定 Web 容器，你可以自由选择 Tomcat、Jetty 或 Undertow
+> 1. 本分支以 Boot 4.1.x 为目标；Boot 3 使用历史制品。
+> 2. 使用满足 Servlet 6.1 的容器；Boot 4 已移除 Undertow 支持。Jetty 按 Boot 4 官方版本选择，尚未在本仓库联合验证。
 
 ## 配置项
 
@@ -614,7 +651,7 @@ public class ProductDTO {
 1. 如果你要使用 `doJsonOut` / `doJsonMsg` 等快捷方法，Controller 需要继承 `MyBaseController`
 2. 请求体参数上添加了 `@Valid`，方法参数校验请在类或方法上添加 `@Validated`
 3. Maven 依赖正确引入，尤其是 `spring-boot-starter-validation`
-4. 如果要启用方法参数切面，请额外引入 `spring-boot-starter-aop`
+4. 如果要启用方法参数切面，请额外引入 `spring-boot-starter-aspectj`
 
 仅使用全局异常处理时，不继承 `MyBaseController` 也可以。
 
@@ -658,16 +695,14 @@ age 年龄必须在0-150之间,name 姓名长度必须在2-50字符之间
 
 ### Q: 如何自定义 Jackson 配置？
 
-**A:** 本 Starter 不包含 Jackson 配置，你可以在项目中自行配置 `ObjectMapper` Bean：
+**A:** Boot 4 推荐通过 builder customizer 调整默认 JsonMapper，这样仍保留 Boot 自动注册的脱敏模块：
 
 ```java
 @Configuration
 public class JacksonConfig {
     @Bean
-    public ObjectMapper objectMapper() {
-        return Jackson2ObjectMapperBuilder.json()
-            .featuresToDisable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-            .build();
+    public org.springframework.boot.jackson.autoconfigure.JsonMapperBuilderCustomizer jsonCustomizer() {
+        return builder -> builder.disable(tools.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     }
 }
 ```
@@ -679,7 +714,7 @@ public class JacksonConfig {
 - **减小体积**：只在需要时才引入依赖
 - **灵活性**：你可以选择不使用某些功能（如校验）
 
-通常情况下，你的项目已经有 `spring-boot-starter-web`，它会提供所有必需的 optional 依赖。
+`spring-boot-starter-webmvc` 提供 MVC 与默认 Jackson 3；参数校验额外引入 `spring-boot-starter-validation`，方法校验切面额外引入 `spring-boot-starter-aspectj`。Fastjson 适配按需添加。
 
 ### Q: 如何选择 Web 容器？
 
@@ -689,13 +724,13 @@ public class JacksonConfig {
 <!-- 使用 Tomcat（默认） -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
+    <artifactId>spring-boot-starter-webmvc</artifactId>
 </dependency>
 
-<!-- 使用 Undertow -->
+<!-- 使用 Jetty -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-web</artifactId>
+    <artifactId>spring-boot-starter-webmvc</artifactId>
     <exclusions>
         <exclusion>
             <groupId>org.springframework.boot</groupId>
@@ -705,7 +740,7 @@ public class JacksonConfig {
 </dependency>
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-undertow</artifactId>
+    <artifactId>spring-boot-starter-jetty</artifactId>
 </dependency>
 ```
 
@@ -731,7 +766,7 @@ public class JacksonConfig {
 
 ### 可选依赖（需要你的项目提供）
 
-以下依赖标记为 `optional`，通常由 `spring-boot-starter-web` 提供：
+以下依赖标记为 `optional`，由应用选用的 WebMVC、Validation、AspectJ 或 JSON 依赖提供：
 
 - `spring-boot-autoconfigure` - 自动配置
 - `spring-webmvc` - MVC 支持
@@ -741,7 +776,8 @@ public class JacksonConfig {
 - `jakarta.validation-api` - 校验 API
 - `hibernate-validator` - 校验实现
 - `slf4j-api` - 日志接口
-- `jackson-databind` - 隐私脱敏 Jackson 适配（有则激活）
+- `tools.jackson.core:jackson-databind` - 默认 Jackson 3 脱敏适配（有则激活）
+- `com.fasterxml.jackson.core:jackson-databind` - 可选 Jackson 2 脱敏适配
 - `fastjson` - 隐私脱敏 Fastjson v1 适配（有则激活）
 - `fastjson2` - 隐私脱敏 Fastjson2 适配（有则激活）
 
@@ -749,12 +785,21 @@ public class JacksonConfig {
 
 1. **避免版本冲突** - 不强制依赖版本，由你的项目统一管理
 2. **减小体积** - 不引入冗余的 starter 和传递依赖
-3. **容器中立** - 不强制 Undertow，你可以选择 Tomcat / Jetty / Undertow
+3. **容器选择** - 由应用选择 Boot 4 支持的 Servlet 6.1 容器，例如 Tomcat 或 Jetty
 4. **灵活性高** - 可以精确控制每个依赖的版本
 
 ## 更新日志
 
-### 1.0-jdk21 版本（最新）
+### 2.0.0-jdk25-SNAPSHOT
+
+- 编译及运行基线升级为 JDK 25。
+- 适配 Boot 4.1／Spring 7，导入 Boot BOM；迁移方法参数校验 API，保留跨参数错误信息。
+- 新增 Jackson 3 脱敏模块及可选依赖隔离测试，覆盖数组形态、展开字段、空值与字段重命名。
+- Web／AOP 依赖分别使用 `spring-boot-starter-webmvc`／`spring-boot-starter-aspectj`；测试使用对应 webmvc-test starter。
+- 更新 Spring 依赖以读取 Java 25 字节码，显式配置 Lombok 及配置元数据处理器。
+- 修复 JDK 25 构建时响应 DTO 缺少生成的 getter、异常响应无法正确序列化的问题。
+
+### 1.0-jdk21 版本（历史）
 - ✅ **隐私脱敏**：新增 `@Privacy` 注解，支持 Jackson / Fastjson / Fastjson2 自动脱敏
 - ✅ 升级 JDK 至 21
 
